@@ -160,6 +160,7 @@ Record each chapter separately, then join. Chapter 1 costs nothing and can be re
   - `ImagePullBackOff`: typo in tag. `kubectl describe pod` events.
   - `CrashLoopBackOff`: `APP_MODE` removed from the config. `kubectl logs --previous`.
   - Readiness probe failing (`FORCE_NOT_READY=true`): pod Running but not Ready, removed from Service endpoints, ALB target unhealthy.
+- Rehearsed on kind 2026-11-07, all four steps work as written, with zero failed requests; see the build log for timings. Argo CD polls every 30 s, so click Refresh in the UI right after each push. With `progressDeadlineSeconds: 60`, Argo CD turns red 60 s after a failing sync, so give each drill about a minute on screen.
 - Cut for time, kept as backups if you want a longer cut: `Pending` (requests too large, `FailedScheduling`), Service selector mismatch (empty endpoints). `OOMKilled` is already shown in Chapter 1 with Docker.
 
 ### Chapter 5: Autoscaling (about 3 min, plus 1 min for node scaling if it fits)
@@ -288,14 +289,28 @@ Local tool comparison (from 2026 community comparisons): kind is fastest to crea
 - Load test (k6, 60 virtual users peak, 190 s): **32,606 requests, 0 failures, avg 192 ms, p95 548 ms**.
 - HPA timeline: CPU hit about 236 percent of request; replicas went 2, 4, 8, 10 within about 75 s of the ramp starting. Held at 10 under load. After load stopped, scale-down began about 80 s later (60 s stabilization window plus metrics lag) and was back at 2 about 110 s after load ended. For the video, the scale-down wait is cut or sped up.
 - Fixed along the way: my first HPA sampler printed the wrong column (it showed max replicas); `scripts/loadtest.sh` now prints `cpu=` and `replicas=` correctly (fixed after this run, not re-run).
-- Not yet exercised: Argo CD, rolling update, the three break-fix drills in Kubernetes, anything on AWS.
+- Not yet exercised (as of this entry): Argo CD, rolling update, the three break-fix drills in Kubernetes, anything on AWS. The Argo CD and Chapter 4 items are done in the next entry.
+
+### 2026-11-07: Chapter 4 rehearsed on kind through Argo CD (all verified)
+Every change below was a git commit pushed to `main` and synced by Argo CD (automated sync). A request every 0.2 s ran against `localhost:8080` through each drill to see whether users would notice.
+- **Rolling update 0.1.0 to 0.2.0** (after `scripts/kind-load.sh 0.2.0`): Argo saw the push after 33 s, the rollout then took about 15 s (surge pod Ready in about 8 s, old pod out, second surge, second old out). 250 requests, 0 failed. Answers switched from 0.1.0 to 0.2.0 with a short overlap, which is the visible proof of a rolling update.
+- **ImagePullBackOff** (tag 0.3.0 does not exist): new pod `ErrImagePull`, then `ImagePullBackOff`; the two old pods kept serving. `kubectl describe pod` events show "Failed to pull image". Fixed with `git revert`; rollout finished about 30 s after the sync. 459 requests, 0 failed.
+- **CrashLoopBackOff** (`APP_MODE` removed from `config.env`): the generated ConfigMap name changes with the content hash, so a new ReplicaSet starts by itself. The new pod exits with code 1 and shows `CrashLoopBackOff` with 3 restarts after about 45 s; `kubectl logs` shows the `missing required environment variable` line (`--previous` was not tried). Fixed with `git revert`. 528 requests, 0 failed.
+- **Readiness failure** (`FORCE_NOT_READY=true`): new pod `Running` but `0/1`; events show `Readiness probe failed: HTTP probe failed with statuscode: 503`; the Service endpoints list only the two old pod IPs. Fixed with `git revert`. 532 requests, 0 failed.
+- **Why nothing failed for users:** `maxUnavailable: 0` with `maxSurge: 1` never removes an old pod until a new one is Ready. Worth saying on camera.
+- **Timing for the video:** after a push, Argo CD took 7 to 39 s to notice (30 s poll plus up to 10 s jitter). Click Refresh in the UI to skip the wait, or cut it in editing.
+- **Finding:** in all three failures Argo CD showed health `Progressing` (amber), not `Degraded` (red), because a Deployment's `progressDeadlineSeconds` defaults to 600 s.
+- **Fix applied (user approved):** `progressDeadlineSeconds: 60` in `k8s/base/deployment.yaml`. It is a spec field, not part of the pod template, so pushing it rolled nothing. Re-ran the readiness drill: Argo CD went `Progressing`, then `Degraded` exactly 60 s after the sync (Deployment condition `Progressing=False ProgressDeadlineExceeded`, old pods still serving, 713 of 713 requests OK). A `git revert` brought it back to `Healthy` right after the rollout finished.
+- **Checked that the 60 s deadline does not break Chapter 5:** full k6 run (60 virtual users, 190 s, 35,093 requests, 0 failed, p95 541 ms) with Argo CD health sampled every 5 s. All 58 samples were `Healthy`; HPA went 2, 4, 8, 10 within about 70 s of the ramp and scaled back down during the cooldown. On kind, new pods are Ready in about 8 s, so a scale-up never nears the deadline.
+- **Risk on EKS, not yet tested:** in the Cluster Autoscaler stretch, pods stay Pending while a node is added (a few minutes). If that counts as a stalled Deployment, Argo CD could flash `Degraded` for a while. Watch for it in the EKS dry run; if it happens, either accept it (the app really is short of capacity) or raise the value in the EKS overlay only.
+- **End state:** kind overlay back at tag 0.1.0 (the storyboard start), app Synced and Healthy. The rehearsal left about 15 commits in `main`'s history, including the reverts.
 
 ### Paused 2026-11-06
 Work paused by the user. Nothing is running: the kind cluster `demo` was deleted, Docker Desktop was quit and the WSL VM shut down. Nothing is committed to git and nothing exists on AWS. To resume the local rehearsal: start Docker Desktop, then in WSL run `scripts/kind-up.sh` and `scripts/kind-deploy.sh 0.1.0` (the `demo-app` images may need `scripts/build-local.sh 0.1.0` again if Docker's image store was reset).
 
 ### Next
-1. Rehearse Chapter 4 on kind (rolling update, ImagePullBackOff, CrashLoopBackOff, readiness).
-2. **Done 2026-11-07:** Argo CD (chart 10.14.0, Argo CD v3.6.1) installed on kind with `scripts/rehearsal-up.sh`; the `demo-app` Application watches https://github.com/QuaziF/eks-demo (`main`, path `k8s/overlays/kind`) and is Synced and Healthy. UI: `scripts/argocd-ui.sh`. Next: rehearse step 1 using git pushes (bump the tag in `k8s/overlays/kind`, `scripts/kind-load.sh 0.2.0` first).
+1. **Done 2026-11-07:** Chapter 4 rehearsed on kind through git pushes and Argo CD (rolling update plus the three break-fix drills, 0 failed requests in each). See the 2026-11-07 build log entry. `progressDeadlineSeconds: 60` added so Argo CD turns red (Degraded) during a failed rollout; verified, and the load test stays Healthy.
+2. **Done 2026-11-07:** Argo CD (chart 10.14.0, Argo CD v3.6.1) installed on kind with `scripts/rehearsal-up.sh`; the `demo-app` Application watches https://github.com/QuaziF/eks-demo (`main`, path `k8s/overlays/kind`) and is Synced and Healthy. UI: `scripts/argocd-ui.sh`. Also rehearse Chapters 3 and 5 with Argo in the loop (load test while Argo shows the HPA scaling) before the EKS run.
 3. AWS phase. Done: CLIs installed, `aws login --profile eks-demo` works (IAM user `eks-demo`, us-east-1), Terraform AWS provider reads that profile, account checked clean. Also done 2026-11-07: Budget 15 USD with email alerts, vCPU quota now 32, plan adjusted for the Free plan (c7i-flex.large nodes). Left: ECR repo, then write `terraform/` (VPC, EKS, node group, IAM, Helm add-ons) and `scripts/teardown.sh`.
 
 ---
