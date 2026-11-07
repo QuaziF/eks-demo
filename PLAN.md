@@ -10,14 +10,14 @@ Plan written 2026-11-06. Prices and facts below were read from AWS pages and a f
 
 | Question | Recommendation |
 |---|---|
-| Which AWS account? | Your existing paid account. Do not open a second account for free credits (section 2). |
-| Realistic total cost | About 8 to 15 USD for the whole project if the cluster only runs during work sessions. About 0.24 USD per hour while up. |
-| Biggest cost risk | Forgetting to tear down (about 174 USD per month), or running a Kubernetes version in extended support (control plane goes 0.10 to 0.60 USD per hour). |
+| Which AWS account? | Your existing personal account. Correction 2026-11-07: it is on the Free plan with the full 100 USD credits unspent, plan ends 2027-05-06 (`aws freetier get-account-plan-state`). Do not open a second account for free credits (section 2). |
+| Realistic total cost | About 8 to 13 USD for the whole project if the cluster only runs during work sessions. About 0.32 USD per hour while up (nodes are c7i-flex.large, see Nodes). It comes out of the 100 USD Free plan credits, if EKS charges are creditable (unconfirmed, check with `scripts/aws-status.sh` after the first run). |
+| Biggest cost risk | Forgetting to tear down (about 233 USD per month; on the Free plan that burns the credits, and when they run out the account closes), or running a Kubernetes version in extended support (control plane goes 0.10 to 0.60 USD per hour). |
 | Region | us-east-1 (decided). The EKS control plane is one flat price in every region, and t3.medium is the same price in us-east-1, us-east-2 and us-west-2 (from memory, not compared side by side), so cost does not separate them. us-east-1 has the most capacity and add-on support. |
 | Cluster build tool | Terraform (decided). terraform-aws-modules for VPC and EKS, Helm releases for the add-ons, state kept locally for this one-person demo. |
 | Video length | 10 to 15 minutes (decided). The storyboard in section 5 is cut to fit. |
 | Teardown | `scripts/teardown.sh`: delete the Argo CD Applications and wait for the ALB to disappear, then `terraform destroy`. `terraform destroy` alone is not enough, because the ALB is created by the in-cluster controller and is not in Terraform state. |
-| Nodes | Managed node group, 2 x t3.medium, min 2, max 3, public subnets, NAT gateway disabled. |
+| Nodes | Managed node group, 2 x c7i-flex.large (2 vCPU, 4 GiB, on the Free plan's eligible list, 29 pods per node), min 2, max 3, public subnets, NAT gateway disabled. The instance type is a Terraform variable. t3.medium is cheaper (0.0416 vs 0.0848 USD per hour) and passes an EC2 dry-run, but it is not on the eligible list and only a real launch proves the Free plan allows it, so it is not the default. |
 | Load balancing | AWS Load Balancer Controller with an ALB Ingress (one ALB). |
 | Autoscaling | HPA on CPU (core). Cluster Autoscaler on EKS only, as a short stretch segment: it needs a cloud node group, so it cannot be exercised on kind. A third node costs about 0.05 USD per hour, so money is not the constraint, video time is. |
 | GitOps / visuals | Self-hosted Argo CD (free). Four-pane screen: Argo CD UI, HPA watch, pods watch, k6 output. |
@@ -39,10 +39,19 @@ Plan written 2026-11-06. Prices and facts below were read from AWS pages and a f
 
 | Option | Verdict |
 |---|---|
-| A. Existing paid account | **Recommended.** Whole project costs roughly a coffee and a sandwich. Add a budget alarm and a teardown routine. |
+| A. Existing personal account (turned out to be on the Free plan with 100 USD credits) | **Chosen.** Whole project costs roughly a coffee and a sandwich, drawn from the credits. Budget alarm created, teardown routine to write. See "Free plan adjustments" below. |
 | B. New account with a different email to get Free plan credits | Not recommended. It goes against the stated eligibility rule (you have had an account), carries suspension risk, and saves at most about 10 USD. Also, the account would close on credit exhaustion or at 6 months, in the middle of a goal that is open-ended. |
 | C. Company sandbox account (Planet DDS has AWS for Cloud9 and Legwork) | Worth one message if this goal is work-sponsored. Costs are trivial either way. Your call, not needed. |
 | D. Skip AWS, run everything on kind locally | Zero cost, but loses the AWS competency angle (VPC, IAM, ECR, ALB, EKS). Keep as the rehearsal and fallback path. |
+
+### Free plan adjustments (decided 2026-11-07)
+Checked with `aws freetier get-account-plan-state`: plan FREE, ACTIVE, 100.00 USD credits unspent, ends 2027-05-06.
+- **Hard deadline:** the plan ends on 2027-05-06 or when the credits run out, whichever is first, and the account then closes (data kept 90 days, upgrade to Paid within that window keeps remaining credits). Record the video well before that date and never leave a cluster running.
+- **Eligible node type:** the Free plan's eligible EC2 types in us-east-1 are c7i-flex.large, m7i-flex.large, t3.micro, t3.small, t4g.micro, t4g.small, t8i.micro and t8i.small. t3.medium is not on the list. Default node type is c7i-flex.large: 4 GiB like t3.medium, 29 pods per node instead of 17 (3 ENIs x 10 IPv4), about 0.043 USD per hour more per node (AWS Price List API, 2026-11-07).
+- **Credits check:** run `scripts/aws-status.sh` before and after every session. It prints the remaining credits and anything billable still running. The first run after the first EKS session answers whether the EKS control plane consumes credits (billing data lags up to a day).
+- **Stay on the Free plan:** do not join AWS Organizations or set up Control Tower (both auto-upgrade to Paid), and do not buy Savings Plans, Reserved Instances or Marketplace items.
+- **Budget:** `eks-demo-monthly-15usd` exists (created 2026-11-07), counts gross usage with credits excluded so it alerts even while credits cover the bill.
+- **Quota:** the On-Demand Standard vCPU limit is now 32 (requested 8, AWS granted more). No node-count limit for this project.
 
 ---
 
@@ -54,7 +63,8 @@ Rates used:
 |---|---|---|
 | EKS control plane, standard support | 0.10 USD per hour | AWS pricing page |
 | EKS control plane, extended support | 0.60 USD per hour | AWS pricing page |
-| t3.medium on-demand | 0.0416 USD per hour (spot about 0.015) | Vantage, dated 2026-11-06 |
+| c7i-flex.large on-demand (the node type) | 0.0848 USD per hour | AWS Price List API, 2026-11-07 |
+| t3.medium on-demand (fallback, not Free plan eligible) | 0.0416 USD per hour (spot about 0.015) | AWS Price List API, 2026-11-07 |
 | t3.small on-demand | 0.0208 USD per hour | Vantage |
 | NAT gateway | 0.045 USD per hour plus 0.045 USD per GB | AWS VPC page worked example (Ohio) |
 | Public IPv4 address | 0.005 USD per hour each | AWS VPC page |
@@ -66,19 +76,19 @@ Hourly cost of the recommended build:
 | Component | USD per hour |
 |---|---|
 | EKS control plane | 0.100 |
-| 2 x t3.medium | 0.083 |
+| 2 x c7i-flex.large | 0.170 |
 | 2 node public IPv4 | 0.010 |
 | ALB + its 2 public IPs + light LCU | 0.040 |
 | 2 x 20 GB gp3 | 0.004 |
-| **Total** | **about 0.24** |
+| **Total** | **about 0.32** |
 
-- 4-hour session: about 1 USD. A day left on: about 5.70 USD. A month left on: about 174 USD.
+- 4-hour session: about 1.30 USD. A day left on: about 7.80 USD. A month left on: about 233 USD.
 - Adding a NAT gateway: about +0.045 per hour (about +1.08 per day), which is why we disable it.
-- Third node during load test: +0.047 per hour.
+- Third node during load test: +0.085 per hour.
 - ECR: images are tiny, storage is cents.
 - Traffic: k6 to ALB is inbound to AWS (free); responses out are small and inside the monthly free outbound allowance.
 
-Budget for the project: 6 to 8 sessions of about 4 hours (build, 2 rehearsals, recording, retakes) = about 8 to 12 USD. Set the AWS Budget at 15 USD.
+Budget for the project: 6 to 8 sessions of about 4 hours (build, 2 rehearsals, recording, retakes) = about 8 to 11 USD at 0.32 per hour, so call it 8 to 13 with slack. The AWS Budget is set at 15 USD (created 2026-11-07): if it alerts, run `scripts/aws-status.sh` before assuming a leak.
 
 ### Cost levers, ranked
 1. **Tear down after every session** (cluster create takes about 15 to 20 minutes, delete about 10; plan the sessions around that).
@@ -92,10 +102,10 @@ Budget for the project: 6 to 8 sessions of about 4 hours (build, 2 rehearsals, r
 9. Skip managed Argo CD (EKS Capabilities, 0.03 USD per capability-hour plus 0.0015 per application-hour). Self-hosting it is free and teaches more.
 
 ### Guardrails (do these before creating anything)
-- AWS Budgets: 15 USD monthly, alerts at 50, 80, 100 percent actual plus a forecast alert, to your email.
+- AWS Budgets: 15 USD monthly, alerts at 50, 80, 100 percent actual plus a forecast alert, to your email. **Done 2026-11-07** (`eks-demo-monthly-15usd`).
 - Tag everything `project=eks-demo` (Terraform AWS provider `default_tags`).
 - IAM admin user or Identity Center role with MFA. Do not work as root.
-- Check Service Quotas: "Running On-Demand Standard instances" vCPUs. New or small accounts can be at 5 vCPUs, which fits 2 x t3.medium (4 vCPU) but not 3 nodes (6 vCPU).
+- Check Service Quotas: "Running On-Demand Standard instances" vCPUs. It was 5 (fits 2 nodes of 2 vCPU, not 3); after a request for 8 it is now 32. **Done 2026-11-07.**
 - A `teardown.sh` script (section 7) and a calendar reminder at session end.
 
 ---
@@ -107,7 +117,7 @@ Laptop / WSL                      AWS us-east-1 (one VPC, 2 AZs, public subnets,
   k6  ---------- HTTP ----------> ALB (created by AWS Load Balancer Controller from an Ingress)
   browser -- port-forward ------> Argo CD (ClusterIP, not exposed)            |
   kubectl / k9s                         EKS control plane (managed)           v
-                                        Managed node group: 2 x t3.medium (min 2, max 3)
+                                        Managed node group: 2 x c7i-flex.large (min 2, max 3)
                                           kube-system: aws-node, kube-proxy, coredns, metrics-server,
                                                        aws-load-balancer-controller, cluster-autoscaler (stretch)
                                           argocd: server, repo-server, application-controller, redis, ...
@@ -118,7 +128,7 @@ GitHub repo: manifests (kustomize base + overlays kind / eks)  <-- Argo CD watch
 ```
 
 Notes that shape the design:
-- **Pod density is the real node-size constraint.** On the default VPC CNI, t3.small allows 11 pods per node and t3.medium 17 (AWS eni-max-pods file). System pods plus Argo CD use roughly 15 to 18 pods. Two t3.medium nodes (34 pod slots) leave room for an HPA up to 10 pods. t3.small does not fit.
+- **Pod density is the real node-size constraint.** On the default VPC CNI, t3.small allows 11 pods per node and t3.medium 17 (AWS eni-max-pods file). System pods plus Argo CD use roughly 15 to 18 pods. Two t3.medium nodes (34 pod slots) would leave room for an HPA up to 10 pods, t3.small does not fit. We use c7i-flex.large (3 ENIs x 10 IPv4 gives 29 pods per node, 58 slots on two nodes), which is on the Free plan's eligible list.
 - Public subnets with no NAT is a **deliberate, stated trade-off**. Say so on camera: production would use private subnets plus NAT or VPC endpoints.
 - Argo CD is reached by `kubectl port-forward` (free, nothing exposed). Only the demo app goes through the ALB.
 - IAM for the Load Balancer Controller: IRSA (OIDC provider) or EKS Pod Identity. Either is a good on-camera talking point.
@@ -251,7 +261,8 @@ Local tool comparison (from 2026 community comparisons): kind is fastest to crea
 ## 10. Unverified items and open decisions
 
 ### Unverified (confirm before relying)
-- Whether EKS control plane charges can be paid by Free plan credits (not stated by AWS). Irrelevant if you stay on the paid account.
+- Whether EKS control plane charges can be paid by Free plan credits (not stated by AWS). The account turned out to be on the Free plan, so this now matters a little: check the remaining credits (`aws freetier get-account-plan-state`) after the first run. On the Free plan, using up the credits closes the account instead of billing it; upgrading to Paid within 90 days keeps remaining credits. Joining AWS Organizations or Control Tower upgrades to Paid automatically.
+- Whether the Free plan blocks the EKS control plane at creation time. EKS is on AWS's list of services available to new sign-ups, so it should be fine, and the first `terraform apply` fails fast and free if not. (t3.medium question resolved by choosing the eligible c7i-flex.large, see "Free plan adjustments".)
 - Terraform VPC module with `enable_nat_gateway = false`, public-only subnets and a managed node group on them. Believed to work (nodes reach the internet through the internet gateway using their public IPs), but not yet tried. The `terraform plan` step in Phase 3 and the first apply settle it.
 - NAT gateway rate quoted from an Ohio worked example, not us-east-1 table. EBS rate from memory. ALB and EC2 rates from page examples and Vantage (region inferred).
 - AWS Load Balancer Controller default replica count and Argo CD pod count, which drive the pod-density estimate. Count with `kubectl get pods -A` during the dry run.
@@ -284,8 +295,8 @@ Work paused by the user. Nothing is running: the kind cluster `demo` was deleted
 
 ### Next
 1. Rehearse Chapter 4 on kind (rolling update, ImagePullBackOff, CrashLoopBackOff, readiness).
-2. Create the GitHub repo and push, then install Argo CD on kind and point it at `k8s/overlays/kind`.
-3. AWS phase: install AWS CLI v2 and Terraform in WSL, set the AWS Budget, create the IAM identity, then write `terraform/` (VPC, EKS, node group, IAM, Helm add-ons) and `scripts/teardown.sh`.
+2. **Done 2026-11-07:** Argo CD (chart 10.14.0, Argo CD v3.6.1) installed on kind with `scripts/rehearsal-up.sh`; the `demo-app` Application watches https://github.com/QuaziF/eks-demo (`main`, path `k8s/overlays/kind`) and is Synced and Healthy. UI: `scripts/argocd-ui.sh`. Next: rehearse step 1 using git pushes (bump the tag in `k8s/overlays/kind`, `scripts/kind-load.sh 0.2.0` first).
+3. AWS phase. Done: CLIs installed, `aws login --profile eks-demo` works (IAM user `eks-demo`, us-east-1), Terraform AWS provider reads that profile, account checked clean. Also done 2026-11-07: Budget 15 USD with email alerts, vCPU quota now 32, plan adjusted for the Free plan (c7i-flex.large nodes). Left: ECR repo, then write `terraform/` (VPC, EKS, node group, IAM, Helm add-ons) and `scripts/teardown.sh`.
 
 ---
 

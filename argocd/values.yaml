@@ -1,0 +1,17 @@
+# Argo CD Helm values, shared by kind and EKS (chart argo/argo-cd, version pinned in
+# scripts/argocd-install.sh). Small footprint on purpose: on two nodes every pod slot and MiB counts.
+configs:
+  params:
+    # Plain HTTP inside the cluster. The UI is only reached through `kubectl port-forward`,
+    # nothing is exposed, so TLS at the Argo CD server adds nothing for this demo.
+    server.insecure: true
+  cm:
+    # Poll git every 30 s instead of the default 3 min, so a push shows up on screen quickly.
+    timeout.reconciliation: 30s
+    timeout.reconciliation.jitter: 10s
+dex:
+  enabled: false # no SSO for a one-person demo
+notifications:
+  enabled: false
+applicationSet:
+  replicas: 0 # not used, saves a pod (the chart has no enabled switch for it)

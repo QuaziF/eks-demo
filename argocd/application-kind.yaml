@@ -1,0 +1,27 @@
+# The Argo CD Application for the local kind cluster: watches this repo and keeps the cluster
+# equal to k8s/overlays/kind. Apply once with `kubectl apply -f argocd/application-kind.yaml`
+# (scripts/argocd-install.sh does it). Everything after that is a git push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-app
+  namespace: argocd
+  # Deleting the Application also deletes what it deployed (matters for teardown on EKS, where
+  # the Ingress owns an ALB that costs money).
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/QuaziF/eks-demo.git
+    targetRevision: main
+    path: k8s/overlays/kind
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo
+  syncPolicy:
+    automated:
+      prune: true # remove what is no longer in git
+      selfHeal: true # undo manual `kubectl` changes
+    syncOptions:
+      - CreateNamespace=true

@@ -13,6 +13,7 @@ See [PLAN.md](PLAN.md) for the plan, costs, storyboard and decisions.
 | `k8s/overlays/kind/` | Local: image from the local daemon, Service as NodePort on localhost:8080 |
 | `k8s/overlays/eks/` | EKS: ECR image, ALB Ingress (needs the AWS Load Balancer Controller) |
 | `kind/` | kind cluster config (3 nodes, Kubernetes 1.36) |
+| `argocd/` | Argo CD Helm values and the demo Application (watches this repo) |
 | `loadtest/` | k6 ramp script |
 | `scripts/` | Everything below |
 
@@ -31,6 +32,18 @@ curl localhost:8080/              # who answered
 scripts/loadtest.sh               # k6 ramp, HPA timeline sampled to /tmp/hpa-timeline.log
 scripts/kind-down.sh              # delete the cluster
 ```
+
+### With Argo CD (what the recording uses)
+
+```bash
+scripts/rehearsal-up.sh           # kind + metrics-server + image + Argo CD + the demo app, synced from GitHub
+scripts/argocd-ui.sh              # http://localhost:8081, user admin (leave running in its own pane)
+scripts/argocd-password.sh        # prints the initial admin password
+scripts/kind-down.sh              # delete the cluster when done
+scripts/aws-status.sh             # AWS: Free plan credits left, anything billable still running
+```
+
+After `rehearsal-up.sh`, a deploy is a git push to `main`: Argo CD polls every 30 s and syncs `k8s/overlays/kind`. Use `kind-deploy.sh` only to skip Argo. A new image version needs `scripts/kind-load.sh <version>` first, because kind nodes cannot pull local images.
 
 Useful panes while the load test runs:
 
