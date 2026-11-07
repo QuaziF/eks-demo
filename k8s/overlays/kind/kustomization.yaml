@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Local cluster: image is built locally and loaded with `kind load docker-image`.
+images:
+  - name: demo-app
+    newName: demo-app
+    newTag: 0.1.0
+
+# No ingress controller locally (ingress-nginx was retired by the Kubernetes project in
+# March 2026). The Service is exposed as a NodePort and kind maps it to localhost:8080.
+patches:
+  - target:
+      kind: Service
+      name: demo-app
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080

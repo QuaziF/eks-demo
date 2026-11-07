@@ -1,0 +1,12 @@
+# Deliberately naive. This is the "before" picture in the demo.
+# Problems worth pointing out on camera:
+#   - full Debian + Go toolchain ships in the final image (hundreds of MB)
+#   - runs as root
+#   - COPY . . before anything else, so any file change busts the cache
+#   - no health check, no labels, no version information
+FROM golang:1.26
+WORKDIR /src
+COPY . .
+RUN go build -o /app .
+EXPOSE 8080
+CMD ["/app"]
