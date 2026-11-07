@@ -8,6 +8,10 @@ spec:
   # `replicas` is intentionally omitted. The HPA owns the replica count. If it were set here,
   # Argo CD self-heal would see drift on every scale event and reset it, fighting the HPA.
   revisionHistoryLimit: 5
+  # Default is 600 s. A rollout that cannot finish (bad image, crash loop, failing readiness) is
+  # reported as failed after 60 s, so Argo CD shows the app as Degraded (red) instead of
+  # Progressing (amber) for ten minutes. Healthy pods here are Ready within about 10 s.
+  progressDeadlineSeconds: 60
   selector:
     matchLabels:
       app.kubernetes.io/name: demo-app
