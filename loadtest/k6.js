@@ -8,12 +8,15 @@ import { check, sleep } from 'k6';
 
 const BASE = __ENV.BASE_URL || 'http://localhost:8080';
 const WORK_MS = __ENV.WORK_MS || '30';
+// How long the full load is held. A new node takes 2 to 3 minutes to join, so for the Cluster
+// Autoscaler run use HOLD=240s to still have load when it arrives.
+const HOLD = __ENV.HOLD || '90s';
 
 export const options = {
   stages: [
     { duration: '45s', target: 20 },
     { duration: '45s', target: 60 },
-    { duration: '90s', target: 60 },
+    { duration: HOLD, target: 60 },
     { duration: '10s', target: 0 },
   ],
   thresholds: {

@@ -9,6 +9,60 @@ configs:
     # Poll git every 30 s instead of the default 3 min, so a push shows up on screen quickly.
     timeout.reconciliation: 30s
     timeout.reconciliation.jitter: 10s
+    # HPA health. This is Argo CD v3.6.1's built-in check (gitops-engine health_hpa.go) with ONE
+    # change: ScalingActive / FailedGetResourceMetric is Progressing instead of Degraded. After a
+    # rolling update replaces every pod, the HPA has no metrics for the new pods until
+    # metrics-server has scraped them (about 35 s on EKS), and the stock check shows the whole app
+    # red for that time although nothing is wrong. Every other HPA failure still shows Degraded.
+    # A custom check replaces the built-in one completely, so re-compare on an Argo CD upgrade.
+    resource.customizations.health.autoscaling_HorizontalPodAutoscaler: |
+      local hs = {}
+      local conditions = {}
+      if obj.status ~= nil and obj.status.conditions ~= nil then
+        conditions = obj.status.conditions
+      end
+
+      local degraded = {
+        AbleToScale = { FailedGetScale = true, FailedUpdateScale = true },
+        ScalingActive = {
+          FailedGetObjectMetric = true,
+          FailedGetPodsMetric = true,
+          FailedGetExternalMetric = true,
+          FailedComputeMetricsReplicas = true,
+          InvalidSelector = true,
+        },
+      }
+
+      -- 1. Real failures stay Degraded.
+      for _, c in ipairs(conditions) do
+        if degraded[c.type] ~= nil and degraded[c.type][c.reason] then
+          hs.status = "Degraded"
+          hs.message = c.message
+          return hs
+        end
+      end
+
+      -- 2. No metrics yet for brand-new pods: transient, show Progressing (amber).
+      for _, c in ipairs(conditions) do
+        if c.type == "ScalingActive" and c.reason == "FailedGetResourceMetric" then
+          hs.status = "Progressing"
+          hs.message = c.message
+          return hs
+        end
+      end
+
+      -- 3. Otherwise Healthy when the HPA can scale (or is held at its limits).
+      for _, c in ipairs(conditions) do
+        if (c.type == "AbleToScale" or c.type == "ScalingLimited") and c.status == "True" then
+          hs.status = "Healthy"
+          hs.message = c.message
+          return hs
+        end
+      end
+
+      hs.status = "Progressing"
+      hs.message = "Waiting to Autoscale"
+      return hs
 dex:
   enabled: false # no SSO for a one-person demo
 notifications:

@@ -1,0 +1,49 @@
+# The Argo CD Application that deploys the demo app to the EKS cluster. It lives in the Argo CD on
+# the local kind cluster (the hub), which has EKS registered as the destination "eks-demo"
+# (scripts/argocd-register-eks.sh), so one Argo CD UI shows both clusters. It watches this repo and
+# keeps EKS equal to k8s/overlays/eks.
+#
+# Do not apply this file directly: scripts/eks-deploy.sh replaces the placeholder IP below with
+# your current public IP and applies the result, so the IP stays out of git.
+# Everything after that is a git push.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  # Not "demo-app": the kind cluster's own Application already has that name in this Argo CD.
+  name: demo-app-eks
+  namespace: argocd
+  # Deleting the Application also deletes what it deployed. On EKS that includes the Ingress, which
+  # owns an ALB that costs money, so teardown deletes this first and waits for the ALB to vanish.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/QuaziF/eks-demo.git
+    targetRevision: main
+    path: k8s/overlays/eks
+    kustomize:
+      # Applied by Argo CD on top of the overlay. 203.0.113.10/32 is a documentation address,
+      # replaced by scripts/eks-deploy.sh with the caller's IP.
+      patches:
+        - target:
+            kind: Ingress
+            name: demo-app
+          patch: |-
+            apiVersion: networking.k8s.io/v1
+            kind: Ingress
+            metadata:
+              name: demo-app
+              annotations:
+                alb.ingress.kubernetes.io/inbound-cidrs: 203.0.113.10/32
+  destination:
+    # The cluster registered by scripts/argocd-register-eks.sh (by name, so the address of a fresh
+    # cluster does not matter).
+    name: eks-demo
+    namespace: demo
+  syncPolicy:
+    automated:
+      prune: true # remove what is no longer in git
+      selfHeal: true # undo manual `kubectl` changes
+    syncOptions:
+      - CreateNamespace=true

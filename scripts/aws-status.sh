@@ -54,3 +54,4 @@ if [ "${found}" -eq 0 ]; then
 else
   echo "SOMETHING IS STILL RUNNING (see the !! lines above)."
 fi
+exit "${found}"
