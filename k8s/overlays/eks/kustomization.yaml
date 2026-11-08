@@ -12,3 +12,9 @@ images:
   - name: demo-app
     newName: 013310058777.dkr.ecr.us-east-1.amazonaws.com/demo-app
     newTag: 0.2.0
+
+configMapGenerator:
+  - name: demo-app-config
+    behavior: merge
+    literals:
+      - APP_MODE=
