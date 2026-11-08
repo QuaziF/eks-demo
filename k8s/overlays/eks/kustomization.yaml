@@ -12,3 +12,28 @@ images:
   - name: demo-app
     newName: 013310058777.dkr.ecr.us-east-1.amazonaws.com/demo-app
     newTag: 0.1.0
+
+# Sized so the Cluster Autoscaler has something to do. The base asks for 100m CPU per pod, which
+# lets 30 pods fit on two nodes, so a node would never be added. With a 350m request exactly 8 pods
+# fit on the two nodes (4 each, after the system pods), and the 9th pod is Pending until the
+# autoscaler adds a node. The limit has to be at least the request. The HPA target is 50 percent of
+# the request, so a pod now scales out at 175m instead of 50m. The maximum of 12 fits on three nodes
+# (the node group maximum), which hold 13. kind keeps the base values.
+patches:
+  - target:
+      kind: Deployment
+      name: demo-app
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 350m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 500m
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: demo-app
+    patch: |-
+      - op: replace
+        path: /spec/maxReplicas
+        value: 12
