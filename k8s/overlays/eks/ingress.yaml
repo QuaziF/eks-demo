@@ -8,6 +8,10 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/healthcheck-path: /readyz
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    # The ALB keeps a deregistered pod in "draining" for 300 s by default, so old pods clutter the
+    # target group for 5 minutes after every update. The app stops serving about 5 s after SIGTERM
+    # and its requests take milliseconds, so 30 s is plenty.
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
     # The app has endpoints that burn CPU and memory on demand, so the ALB only accepts your own
     # public IP. This value is a placeholder (a documentation address, reachable by nobody): the
     # Argo CD Application patches in the real IP when scripts/eks-deploy.sh applies it, so the
