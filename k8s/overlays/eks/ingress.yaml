@@ -1,4 +1,4 @@
-# Untested until the AWS phase. Needs the AWS Load Balancer Controller running in the cluster.
+# Needs the AWS Load Balancer Controller running in the cluster (terraform/cluster installs it).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -8,8 +8,10 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/healthcheck-path: /readyz
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
-    # The app has endpoints that burn CPU and memory on demand. Restrict the ALB to your own
-    # public IP before applying, so the internet cannot use them. Replace the value below.
+    # The app has endpoints that burn CPU and memory on demand, so the ALB only accepts your own
+    # public IP. This value is a placeholder (a documentation address, reachable by nobody): the
+    # Argo CD Application patches in the real IP when scripts/eks-deploy.sh applies it, so the
+    # home IP is never committed to this public repo.
     alb.ingress.kubernetes.io/inbound-cidrs: 203.0.113.10/32
 spec:
   ingressClassName: alb
