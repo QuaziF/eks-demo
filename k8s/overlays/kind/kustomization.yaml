@@ -23,9 +23,3 @@ patches:
       - op: add
         path: /spec/ports/0/nodePort
         value: 30080
-
-configMapGenerator:
-  - name: demo-app-config
-    behavior: merge
-    literals:
-      - APP_MODE=
