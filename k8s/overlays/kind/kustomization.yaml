@@ -8,7 +8,7 @@ resources:
 images:
   - name: demo-app
     newName: demo-app
-    newTag: 0.1.0
+    newTag: 0.2.0
 
 # No ingress controller locally (ingress-nginx was retired by the Kubernetes project in
 # March 2026). The Service is exposed as a NodePort and kind maps it to localhost:8080.
