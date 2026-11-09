@@ -6,7 +6,7 @@ resources:
   - ingress.yaml
 
 # The real ECR repository and tag. Argo CD deploys whatever this file says, so a release is a
-# git commit that changes newTag (push the image first: scripts/ecr-push.sh <tag>). An AWS
+# git commit that changes newTag (scripts/release.sh <tag> pushes the image, then commits). An AWS
 # account id is an identifier, not a secret.
 images:
   - name: demo-app

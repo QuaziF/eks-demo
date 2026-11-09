@@ -2,7 +2,7 @@
 
 Demo project for the "Master Containerization and Orchestration" goal: a small Go service, built as a hardened Docker image, deployed to Kubernetes with GitOps (Argo CD), and autoscaled under load. The same manifests run on a local kind cluster (free rehearsal) and on EKS (the recording).
 
-See [PLAN.md](PLAN.md) for the plan, costs, storyboard and decisions.
+See [PLAN.md](PLAN.md) for the plan, costs, storyboard and decisions, and [docs/recording/](docs/recording/README.md) for the reading script and screen guide for each chapter of the recording.
 
 ## Layout
 
@@ -16,7 +16,8 @@ See [PLAN.md](PLAN.md) for the plan, costs, storyboard and decisions.
 | `argocd/` | Argo CD Helm values and the demo Application (watches this repo) |
 | `terraform/` | `ecr/` (the registry, stays up) and `cluster/` (VPC, EKS, add-ons, costs money while it exists). See [terraform/README.md](terraform/README.md) |
 | `loadtest/` | k6 ramp script |
-| `scripts/` | Everything below |
+| `docs/recording/` | Reading script and screen guide per chapter: narration, commands, screen layout, how to cut long waits. Start with its [README](docs/recording/README.md) |
+| `scripts/` | Everything below. Recording helpers: `rec-prep.sh` (pre-flight: `ch1`, `ch1x` or `eks`), `scan-image.sh` (Trivy summary), `traffic.sh` (live request stream), `release.sh` (one-command release) |
 
 ## Local rehearsal (WSL Ubuntu, Docker Desktop running)
 
@@ -44,7 +45,22 @@ scripts/kind-down.sh              # delete the cluster when done (refuses while 
 scripts/aws-status.sh             # AWS: Free plan credits left, anything billable still running
 ```
 
-After `rehearsal-up.sh`, a deploy is a git push to `main`: Argo CD polls every 30 s and syncs `k8s/overlays/kind`. Use `kind-deploy.sh` only to skip Argo. A new image version needs `scripts/kind-load.sh <version>` first, because kind nodes cannot pull local images.
+After `rehearsal-up.sh`, a deploy is a git push to `main`: Argo CD polls every 30 s and syncs `k8s/overlays/kind`. Use `kind-deploy.sh` only to skip Argo. A new image version needs `scripts/kind-load.sh <version>` first, because kind nodes cannot pull local images. `scripts/release.sh` does all of that in one command (next section).
+
+### Releasing a new version
+
+Argo CD deploys what git says and never builds anything, so changing the app code alone deploys nothing: a release is a commit that changes `newTag` in an overlay (`k8s/overlays/kind`, `k8s/overlays/eks`). `scripts/release.sh` does the steps a CI pipeline would:
+
+```bash
+scripts/release.sh 0.2.0              # build, load into kind, push to ECR, bump newTag in both overlays, commit, push, wait for Argo CD
+scripts/release.sh 0.2.0 --kind-only  # local only, no AWS needed
+scripts/release.sh 0.2.0 --eks-only   # EKS only, no kind needed
+scripts/release.sh 0.2.0 --dry-run    # run the checks, show the plan, change nothing
+```
+
+Commit your app change first. The script refuses to build from uncommitted `app/` changes (the image must map to a commit), from a branch other than the one Argo CD watches, from a branch that is behind origin, and with the mutable tag `latest` (ECR tags are immutable, so every release needs a new tag). It commits only the overlay file(s), so other local edits, such as the IP that `eks-deploy.sh` writes into `argocd/application-eks.yaml`, stay out. Afterwards it waits (up to 4 min) until the Argo CD app on the hub is Synced and Healthy at the pushed commit; an app that is not deployed (EKS is down) is skipped and picks the tag up when it is deployed. Roll back with a `git revert` of the release commit and a push. `--no-push` stops after the commit.
+
+In a team this would be CI (build, scan, push an immutable tag, commit the bump to a config repo) or an image updater such as Argo CD Image Updater writing the tag back to git.
 
 ### On AWS (costs money while the cluster exists)
 
