@@ -83,6 +83,8 @@ kubectl -n demo get pods -w
 k9s -n demo
 ```
 
+If a watch against EKS ends after about a minute with `unable to decode an event from the watch stream: http2: client connection lost`, run `export DISABLE_HTTP2=1` first. From my WSL2 machine the EKS API endpoint never answers kubectl's HTTP/2 keepalive ping (a trace shows the PING sent after 30 s idle and no reply, so kubectl closes the connection 15 s later); plain requests are fine and a watch with HTTP/2 off ran 10 minutes without a drop. It only affects long-lived watches: `get -w` for sure, and probably `kubectl wait` or `rollout status` when nothing changes for a minute (not tested). It is harmless against kind. I did not find out whether the cause is on the AWS side or on the network path.
+
 ## App endpoints
 
 | Path | Purpose |
