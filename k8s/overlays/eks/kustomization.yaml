@@ -11,7 +11,7 @@ resources:
 images:
   - name: demo-app
     newName: 013310058777.dkr.ecr.us-east-1.amazonaws.com/demo-app
-    newTag: 0.3.0
+    newTag: 0.1.0
 
 # Sized so the Cluster Autoscaler has something to do. The base asks for 100m CPU per pod, which
 # lets 30 pods fit on two nodes, so a node would never be added. With a 350m request exactly 8 pods
