@@ -37,9 +37,3 @@ patches:
       - op: replace
         path: /spec/maxReplicas
         value: 12
-
-configMapGenerator:
-  - name: demo-app-config
-    behavior: merge
-    literals:
-      - APP_MODE=
